@@ -18,6 +18,11 @@ app.use(cors({
 app.use(express.json());
 app.use(morgan('dev')); // Dev logger
 
+// Root route for Render health checks (HEAD / or GET /)
+app.get('/', (req, res) => {
+  res.status(200).send('TaskFlow Express API Server is live and healthy!');
+});
+
 // Base API route check
 app.get('/api/health', (req, res) => {
   res.json({
