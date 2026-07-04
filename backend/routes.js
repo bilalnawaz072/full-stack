@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const db = require('./db');
+const { prisma } = require('./db');
 
 // --- LISTS ROUTES ---
 
 // Get all columns/lists, sorted by position
 router.get('/lists', async (req, res) => {
   try {
-    const lists = await db.query('SELECT * FROM lists ORDER BY position ASC');
+    const lists = await prisma.list.findMany({
+      orderBy: { position: 'asc' }
+    });
     res.json(lists);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -23,11 +25,14 @@ router.post('/lists', async (req, res) => {
   
   try {
     const listPosition = position || 1;
-    await db.query(
-      'INSERT INTO lists (id, title, position) VALUES (?, ?, ?)',
-      [id, title, listPosition]
-    );
-    res.status(201).json({ id, title, position: listPosition });
+    const newList = await prisma.list.create({
+      data: {
+        id,
+        title,
+        position: listPosition
+      }
+    });
+    res.status(201).json(newList);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -39,27 +44,26 @@ router.put('/lists/:id', async (req, res) => {
   const { title, position } = req.body;
   
   try {
-    if (title !== undefined && position !== undefined) {
-      await db.query('UPDATE lists SET title = ?, position = ? WHERE id = ?', [title, position, id]);
-    } else if (title !== undefined) {
-      await db.query('UPDATE lists SET title = ? WHERE id = ?', [title, id]);
-    } else if (position !== undefined) {
-      await db.query('UPDATE lists SET position = ? WHERE id = ?', [position, id]);
-    }
+    await prisma.list.update({
+      where: { id },
+      data: {
+        title: title !== undefined ? title : undefined,
+        position: position !== undefined ? position : undefined
+      }
+    });
     res.json({ message: 'List updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Delete a list and all tasks associated with it
+// Delete a list (cascading deletes will handle the tasks automatically)
 router.delete('/lists/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    // Delete all tasks in the list first
-    await db.query('DELETE FROM tasks WHERE list_id = ?', [id]);
-    // Delete the list itself
-    await db.query('DELETE FROM lists WHERE id = ?', [id]);
+    await prisma.list.delete({
+      where: { id }
+    });
     res.json({ message: 'List and its tasks deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -74,9 +78,13 @@ router.post('/lists/reorder', async (req, res) => {
   }
 
   try {
-    for (const item of lists) {
-      await db.query('UPDATE lists SET position = ? WHERE id = ?', [item.position, item.id]);
-    }
+    const queries = lists.map(item => 
+      prisma.list.update({
+        where: { id: item.id },
+        data: { position: item.position }
+      })
+    );
+    await prisma.$transaction(queries);
     res.json({ message: 'Lists reordered successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -89,13 +97,13 @@ router.post('/lists/reorder', async (req, res) => {
 // Get all tasks
 router.get('/tasks', async (req, res) => {
   try {
-    const tasks = await db.query('SELECT * FROM tasks ORDER BY list_id, position ASC');
-    // Parse the checklist JSON strings back into objects
-    const parsedTasks = tasks.map(task => ({
-      ...task,
-      checklist: task.checklist ? JSON.parse(task.checklist) : []
-    }));
-    res.json(parsedTasks);
+    const tasks = await prisma.task.findMany({
+      orderBy: [
+        { list_id: 'asc' },
+        { position: 'asc' }
+      ]
+    });
+    res.json(tasks);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -109,28 +117,19 @@ router.post('/tasks', async (req, res) => {
   }
 
   try {
-    const taskPosition = position || 1;
-    const taskPriority = priority || 'Medium';
-    const taskChecklist = checklist ? JSON.stringify(checklist) : JSON.stringify([]);
-    const createdAt = new Date().toISOString();
-
-    await db.query(
-      `INSERT INTO tasks (id, list_id, title, description, priority, due_date, position, created_at, checklist)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [id, list_id, title, description || '', taskPriority, due_date || null, taskPosition, createdAt, taskChecklist]
-    );
-
-    res.status(201).json({
-      id,
-      list_id,
-      title,
-      description: description || '',
-      priority: taskPriority,
-      due_date: due_date || null,
-      position: taskPosition,
-      created_at: createdAt,
-      checklist: checklist || []
+    const newTask = await prisma.task.create({
+      data: {
+        id,
+        list_id,
+        title,
+        description: description || '',
+        priority: priority || 'Medium',
+        due_date: due_date || null,
+        position: position || 1,
+        checklist: checklist || []
+      }
     });
+    res.status(201).json(newTask);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -142,28 +141,18 @@ router.put('/tasks/:id', async (req, res) => {
   const { list_id, title, description, priority, due_date, position, checklist } = req.body;
 
   try {
-    // Dynamically build the update query based on fields provided
-    const fields = [];
-    const params = [];
-
-    if (list_id !== undefined) { fields.push('list_id = ?'); params.push(list_id); }
-    if (title !== undefined) { fields.push('title = ?'); params.push(title); }
-    if (description !== undefined) { fields.push('description = ?'); params.push(description); }
-    if (priority !== undefined) { fields.push('priority = ?'); params.push(priority); }
-    if (due_date !== undefined) { fields.push('due_date = ?'); params.push(due_date); }
-    if (position !== undefined) { fields.push('position = ?'); params.push(position); }
-    if (checklist !== undefined) { 
-      fields.push('checklist = ?'); 
-      params.push(JSON.stringify(checklist)); 
-    }
-
-    if (fields.length === 0) {
-      return res.status(400).json({ error: 'No fields to update.' });
-    }
-
-    params.push(id); // For the WHERE clause
-    await db.query(`UPDATE tasks SET ${fields.join(', ')} WHERE id = ?`, params);
-
+    await prisma.task.update({
+      where: { id },
+      data: {
+        list_id: list_id !== undefined ? list_id : undefined,
+        title: title !== undefined ? title : undefined,
+        description: description !== undefined ? description : undefined,
+        priority: priority !== undefined ? priority : undefined,
+        due_date: due_date !== undefined ? due_date : undefined,
+        position: position !== undefined ? position : undefined,
+        checklist: checklist !== undefined ? checklist : undefined
+      }
+    });
     res.json({ message: 'Task updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -178,12 +167,16 @@ router.post('/tasks/reorder', async (req, res) => {
   }
 
   try {
-    for (const item of tasks) {
-      await db.query(
-        'UPDATE tasks SET list_id = ?, position = ? WHERE id = ?',
-        [item.list_id, item.position, item.id]
-      );
-    }
+    const queries = tasks.map(item => 
+      prisma.task.update({
+        where: { id: item.id },
+        data: {
+          list_id: item.list_id,
+          position: item.position
+        }
+      })
+    );
+    await prisma.$transaction(queries);
     res.json({ message: 'Tasks reordered successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -194,7 +187,9 @@ router.post('/tasks/reorder', async (req, res) => {
 router.delete('/tasks/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    await db.query('DELETE FROM tasks WHERE id = ?', [id]);
+    await prisma.task.delete({
+      where: { id }
+    });
     res.json({ message: 'Task deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });

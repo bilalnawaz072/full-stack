@@ -1,0 +1,32 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider     = "prisma-client-js"
+  moduleFormat = "cjs"
+}
+
+model List {
+  id       String @id
+  title    String
+  position Int
+  tasks    Task[]
+
+  @@map("lists")
+}
+
+model Task {
+  id          String   @id
+  list_id     String
+  list        List     @relation(fields: [list_id], references: [id], onDelete: Cascade)
+  title       String
+  description String?  @db.Text
+  priority    String   @default("Medium")
+  due_date    String?
+  position    Int
+  created_at  DateTime @default(now())
+  checklist   Json?
+
+  @@map("tasks")
+}
