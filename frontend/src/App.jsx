@@ -4,7 +4,7 @@ import KanbanBoard from './components/KanbanBoard';
 import AnalyticsView from './components/AnalyticsView';
 import TaskModal from './components/TaskModal';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export default function App() {
   const [activeView, setActiveView] = useState('board'); // 'board' | 'analytics'
