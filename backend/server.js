@@ -27,7 +27,7 @@ app.get('/', (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
-    database: db.getDbType(),
+    database: 'postgresql (prisma)',
     timestamp: new Date().toISOString()
   });
 });
