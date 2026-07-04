@@ -10,7 +10,7 @@ export default function App() {
   const [activeView, setActiveView] = useState('board'); // 'board' | 'analytics'
   const [lists, setLists] = useState([]);
   const [tasks, setTasks] = useState([]);
-  
+
   // Database status and fallbacks
   const [backendConnected, setBackendConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -31,11 +31,11 @@ export default function App() {
       // Test health endpoint
       const healthRes = await fetch(`${API_BASE}/health`);
       if (!healthRes.ok) throw new Error('Backend health check failed');
-      
+
       // Fetch lists and tasks from backend
       const listsRes = await fetch(`${API_BASE}/lists`);
       const tasksRes = await fetch(`${API_BASE}/tasks`);
-      
+
       const listsData = await listsRes.json();
       const tasksData = await tasksRes.json();
 
@@ -119,7 +119,7 @@ export default function App() {
 
   const handleSaveTask = async (taskData) => {
     setIsModalOpen(false);
-    
+
     if (editingTask) {
       // Update existing task
       const updatedTasks = tasks.map(t => t.id === taskData.id ? taskData : t);
@@ -144,7 +144,7 @@ export default function App() {
         position: tasks.filter(t => t.list_id === taskData.list_id).length + 1,
         created_at: new Date().toISOString()
       };
-      
+
       const updatedTasks = [...tasks, newTask];
       syncTasks(updatedTasks);
 
@@ -164,7 +164,7 @@ export default function App() {
 
   const handleDeleteTask = async (taskId) => {
     if (!confirm('Are you sure you want to delete this task?')) return;
-    
+
     const updatedTasks = tasks.filter(t => t.id !== taskId);
     syncTasks(updatedTasks);
 
@@ -185,8 +185,8 @@ export default function App() {
     const listTasks = tasks.filter(t => t.list_id === targetListId);
     const newPosition = listTasks.length + 1;
 
-    const updatedTasks = tasks.map(t => 
-      t.id === taskId 
+    const updatedTasks = tasks.map(t =>
+      t.id === taskId
         ? { ...t, list_id: targetListId, position: newPosition }
         : t
     );
@@ -247,7 +247,7 @@ export default function App() {
 
     const updatedLists = lists.filter(l => l.id !== listId);
     const updatedTasks = tasks.filter(t => t.list_id !== listId);
-    
+
     syncLists(updatedLists);
     syncTasks(updatedTasks);
 
