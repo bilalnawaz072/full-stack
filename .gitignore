@@ -1,0 +1,18 @@
+# Node.js dependencies
+node_modules/
+
+# Local database file
+backend/tasks.db
+
+# Environment files containing secrets
+backend/.env
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+
+# Build artifacts
+frontend/dist/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
